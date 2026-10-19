@@ -1,0 +1,54 @@
+name: Add list entry
+on:
+  workflow_dispatch:
+    inputs:
+      upstream:
+        description: 'Upstream repo to branch from (owner/name)'
+        required: true
+      anchor:
+        description: 'Unique text on the line after which the entry will be inserted'
+        required: true
+      entry:
+        description: 'Full markdown line to insert (without trailing newline)'
+        required: true
+      branch:
+        description: 'New branch name for the change'
+        required: true
+        default: 'add-entry'
+permissions:
+  contents: write
+jobs:
+  add-entry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Insert entry and push branch
+        env:
+          UPSTREAM: ${{ inputs.upstream }}
+          ANCHOR: ${{ inputs.anchor }}
+          ENTRY: ${{ inputs.entry }}
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          git fetch "https://github.com/$UPSTREAM.git" main
+          git checkout -b "$BRANCH" FETCH_HEAD
+          python3 - <<'PYEOF'
+          import os
+          anchor = os.environ['ANCHOR']
+          entry = os.environ['ENTRY']
+          path = 'README.md'
+          with open(path, encoding='utf-8') as f:
+              lines = f.readlines()
+          if any(l.rstrip('\n') == entry for l in lines):
+              raise SystemExit('entry already present')
+          idx = next(i for i, l in enumerate(lines) if anchor in l)
+          lines.insert(idx + 1, entry.rstrip('\n') + '\n')
+          with open(path, 'w', encoding='utf-8') as f:
+              f.writelines(lines)
+          print('inserted after line', idx + 1)
+          PYEOF
+          git config user.name "bloriner"
+          git config user.email "bloriner@users.noreply.github.com"
+          git add README.md
+          git commit -m "Add Stall"
+          git push -u origin "$BRANCH"
